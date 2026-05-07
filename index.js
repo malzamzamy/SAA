@@ -14,7 +14,7 @@ const settings = {
 const MY_INFO = {
     keyword: "🐈‍⬛",  // الكلمة الدلالية الخاصة بهذا البوت (القطة)
     ownerId: "2481425"  
-};
+}; 
 
 let canOpenBoxes = true; 
 let isPaused = false; 
