@@ -96,7 +96,7 @@ service.on('ready', async () => {
     setInterval(async () => {
         await service.messaging.sendGroupMessage(settings.taskGroupId, '!مد مهام');
         await delay(2000); // تأخير ثانيتين
-        await service.messaging.sendGroupMessage(settings.depositGroupId, '!مد تحالف ايداع');
+        await service.messaging.sendGroupMessage(settings.depositGroupId, '!مد تحالف ايداع كل');
     }, settings.tasksInterval);
 
     // جدولة فتح الصناديق
