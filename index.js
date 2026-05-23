@@ -25,40 +25,40 @@ service.on('groupMessage', async (message) => {
         const isTargetGroup = message.targetGroupId === settings.taskGroupId || message.targetGroupId === settings.depositGroupId;
         if (!isTargetGroup) return;
 
-        if (content.includes("اختبار تحقق سريع") && content.includes(MY_INFO.myId)) {
+        if (content.includes("تحقق") && content.includes(MY_INFO.myId)) {
             
-            // 1. استخراج الرموز من الرسالة كاملة
-            const symbolMatch = content.match(/العلامتين\s*([^\s])\s*و\s*([^\s])/u);
+            // 1. استخراج الرموز من الرسالة
+            const symbolMatch = content.match(/العلامتين\s*([^\s\w\u0600-\u06FF])\s*و\s*([^\s\w\u0600-\u06FF])/u);
 
             if (symbolMatch) {
                 const sym1 = symbolMatch[1];
                 const sym2 = symbolMatch[2];
                 console.log(`✅ تم تحديد العلامات: [${sym1}] و [${sym2}]`);
 
-                // 2. الحل الجذري: تقسيم الرسالة عند كلمة "فقط:"
-                // هذا سيأخذ كل ما بعد "فقط:" (حيث يوجد الكود)
-                const parts = content.split('فقط:');
-                if (parts.length < 2) {
-                    console.log("❌ لم أجد كلمة 'فقط:' في الرسالة.");
-                    return;
+                // 2. البحث عن كافة المطابقات في النص كاملاً
+                const pattern = new RegExp(`${escapeRegExp(sym1)}(.*?)${escapeRegExp(sym2)}`, 'gu');
+                const allMatches = [...content.matchAll(pattern)];
+
+                // 3. المنطق الجديد: إذا وجد أكثر من مطابقة، نأخذ الثانية (تجاهل الأولى الخاصة بالتعليمات)
+                // إذا وجد مطابقة واحدة فقط، نستخدمها هي
+                let targetResult;
+                if (allMatches.length > 1) {
+                    targetResult = allMatches[1]; // نأخذ المطابقة الثانية
+                    console.log(`🔎 تم العثور على ${allMatches.length} مطابقات، سأستخدم الثانية (تجاهل التعليمات).`);
+                } else if (allMatches.length === 1) {
+                    targetResult = allMatches[0];
+                    console.log(`🔎 تم العثور على مطابقة واحدة فقط.`);
                 }
-                
-                const answerArea = parts[1].trim();
-                console.log(`🔎 منطقة البحث المخصصة: "${answerArea}"`);
 
-                // 3. البحث عن الإجابة في منطقة البحث فقط
-                const pattern = new RegExp(`${escapeRegExp(sym1)}(.*?)${escapeRegExp(sym2)}`, 'u');
-                const result = answerArea.match(pattern);
-
-                if (result && result[1]) {
-                    const answer = result[1].trim();
+                if (targetResult && targetResult[1]) {
+                    const answer = targetResult[1].trim();
                     console.log(`🚀 الإجابة النهائية المحددة: ${answer}`);
                     
                     setTimeout(async () => {
                         await service.messaging.sendGroupMessage(message.targetGroupId, `#${answer}`);
                     }, 3000);
                 } else {
-                    console.log("❌ لم أجد نصاً بين العلامتين في الجزء المخصص للإجابة.");
+                    console.log("❌ لم أجد نصاً بين العلامتين.");
                 }
             } else {
                 console.log("❌ فشل استخراج العلامات من نص السؤال.");
@@ -71,7 +71,7 @@ service.on('groupMessage', async (message) => {
 
 // --- قسم المهام الدورية ---
 service.on('ready', async () => {
-    console.log(`🚀 البوت يعمل الآن - نظام عزل الإجابة عبر 'فقط:' مفعل.`);
+    console.log(`🚀 البوت يعمل الآن - نظام تجاهل التعليمات مفعل.`);
     try {
         await service.group.joinById(settings.taskGroupId);
         await service.group.joinById(settings.depositGroupId);
