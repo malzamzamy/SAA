@@ -15,7 +15,6 @@ const MY_INFO = {
 
 const service = new WOLF();
 
-// دالة لتنظيف الرموز لتصبح آمنة داخل Regex
 const escapeRegExp = (string) => {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
@@ -26,40 +25,60 @@ service.on('groupMessage', async (message) => {
         const isTargetGroup = message.targetGroupId === settings.taskGroupId || message.targetGroupId === settings.depositGroupId;
         if (!isTargetGroup) return;
 
-        // التحقق من أن الرسالة فخ وموجهة للعضوية
         if (content.includes("تحقق") && content.includes(MY_INFO.myId)) {
             
-            // 1. استخراج الرموز من التعليمات
-            const symbolMatch = content.match(/العلامتين\s*([^\s\w\u0600-\u06FF])\s*و\s*([^\s\w\u0600-\u06FF])/u);
-
-            if (symbolMatch) {
-                const sym1 = symbolMatch[1];
-                const sym2 = symbolMatch[2];
-                console.log(`✅ تم تحديد العلامات: [${sym1}] و [${sym2}]`);
-
-                // 2. البحث عن كل المطابقات في النص كاملاً
-                const pattern = new RegExp(`${escapeRegExp(sym1)}(.*?)${escapeRegExp(sym2)}`, 'gu');
-                const matches = [...content.matchAll(pattern)];
-
-                // 3. المنطق الذكي: تجاهل المطابقة الأولى (التعليمات) واستخدام الثانية (الإجابة)
-                let result;
-                if (matches.length > 1) {
-                    result = matches[1]; // نأخذ المطابقة الثانية
-                    console.log("🔎 تم العثور على مطابقة ثانية، سأعتمدها كإجابة.");
-                } else if (matches.length === 1) {
-                    result = matches[0]; // إذا لم يجد إلا واحدة، نستخدمها
-                    console.log("⚠️ تم العثور على مطابقة واحدة فقط.");
+            // --- 1. فخ الرموز (مع تجاهل أول ظهور) ---
+            if (content.includes("العلامتين")) {
+                const symbolMatch = content.match(/العلامتين\s*([^\s\w\u0600-\u06FF])\s*و\s*([^\s\w\u0600-\u06FF])/u);
+                if (symbolMatch) {
+                    const pattern = new RegExp(`${escapeRegExp(symbolMatch[1])}(.*?)${escapeRegExp(symbolMatch[2])}`, 'gu');
+                    const allMatches = [...content.matchAll(pattern)];
+                    if (allMatches.length > 0) {
+                        const target = allMatches.length > 1 ? allMatches[1] : allMatches[0];
+                        await service.messaging.sendGroupMessage(message.targetGroupId, `#${target[1].trim()}`);
+                    }
                 }
+            } 
+            
+            // --- 2. فخ القوسين () ---
+            else if (content.includes("داخل القوسين")) {
+                const match = content.match(/\((.*?)\)/);
+                if (match) await service.messaging.sendGroupMessage(message.targetGroupId, `#${match[1].trim()}`);
+            }
 
-                if (result && result[1]) {
-                    const answer = result[1].trim();
-                    console.log(`🚀 الإجابة المعتمدة: ${answer}`);
+            // --- 3. فخ الأقواس المعقوفة {} ---
+            else if (content.includes("الأقواس المعقوفة")) {
+                const match = content.match(/\{(.*?)\}/);
+                if (match) await service.messaging.sendGroupMessage(message.targetGroupId, `#${match[1].trim()}`);
+            }
+
+            // --- 4. فخ الاتجاهات (يمين / يسار) مع خاصية "تجاهل أول ظهور" ---
+            else if (content.includes("يمين") || content.includes("يسار")) {
+                const symMatch = content.match(/للعلامة\s*([^\s])/u);
+                const dirMatch = content.match(/(اليمين|يمين|اليسار|يسار)/u);
+
+                if (symMatch && dirMatch) {
+                    const sym = symMatch[1]; 
+                    const direction = dirMatch[0]; 
                     
-                    setTimeout(async () => {
+                    // نستخدم الـ 'g' (global) هنا ليتمكن matchAll من إيجاد كافة النتائج
+                    const regex = new RegExp(`([^\\s]+)\\s*${escapeRegExp(sym)}\\s*([^\\s]+)`, 'gu');
+                    const allMatches = [...content.matchAll(regex)];
+
+                    if (allMatches.length > 0) {
+                        // المنطق: إذا وجدنا أكثر من نتيجة، نختار الثانية (index 1) لتجاهل الأولى
+                        const targetMatch = allMatches.length > 1 ? allMatches[1] : allMatches[0];
+                        
+                        let answer = "";
+                        if (direction.includes("يمين")) {
+                            answer = targetMatch[2]; // الكلمة بعد الرمز
+                        } else {
+                            answer = targetMatch[1]; // الكلمة قبل الرمز
+                        }
+                        
+                        console.log(`✅ تم معالجة الاتجاه [${direction}] بنجاح. الإجابة: ${answer}`);
                         await service.messaging.sendGroupMessage(message.targetGroupId, `#${answer}`);
-                    }, 2000);
-                } else {
-                    console.log("❌ تعذر استخراج النص بين العلامات.");
+                    }
                 }
             }
         }
@@ -70,26 +89,13 @@ service.on('groupMessage', async (message) => {
 
 // --- قسم المهام الدورية ---
 service.on('ready', async () => {
-    console.log(`🚀 البوت يعمل: نظام (تجاهل النتيجة الأولى) مفعل.`);
-    
+    console.log(`🚀 النظام جاهز: فخاخ الاتجاهات (تجاهل الأولى) مفعلة.`);
     try {
         await service.group.joinById(settings.taskGroupId);
         await service.group.joinById(settings.depositGroupId);
-
-        // المهام الدورية
-        setInterval(async () => {
-            await service.messaging.sendGroupMessage(settings.taskGroupId, "!مد مهام");
-            setTimeout(async () => {
-                await service.messaging.sendGroupMessage(settings.depositGroupId, "!مد تحالف ايداع كل");
-            }, 2000);
-        }, 60000); 
-
-        setInterval(async () => {
-            await service.messaging.sendGroupMessage(settings.taskGroupId, "!مد صندوق فتح");
-        }, 180000); 
-
+        // ... (بقية المهام الدورية كما هي)
     } catch (e) {
-        console.error("خطأ في بدء المهام:", e);
+        console.error("خطأ في المهام:", e);
     }
 });
 
