@@ -1,11 +1,11 @@
 {
-  "name": "your-bot-name",
+  "name": "wolf-bot",
   "version": "1.0.0",
   "main": "index.js",
   "dependencies": {
-    "wolf.js": "^latest",
-    "axios": "^latest",
-    "dotenv": "^latest",
-    "@google/generative-ai": "^0.11.1" 
+    "wolf.js": "latest",
+    "axios": "latest",
+    "dotenv": "latest",
+    "@google/generative-ai": "latest"
   }
 }
