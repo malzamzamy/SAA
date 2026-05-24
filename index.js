@@ -1,72 +1,52 @@
-import 'dotenv/config';
 import wolfjs from 'wolf.js';
 import axios from 'axios';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// ⚠️ ضع مفتاحك هنا مباشرة كما طلبت
+const GEMINI_API_KEY = 'AIzaSyBPR7jm6_v0ESdnLanaln8DLHQWLTFulZs'; 
 
 const { WOLF } = wolfjs;
 const service = new WOLF();
 
-// الإعدادات - تأكد من تعبئة البيانات في ملف .env
+// إعداد Gemini
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
 const settings = {
-    allowedGroupIds: [81889058], // أرقام القنوات المسموح بها
-    verificationGroupId: 9969,          // القناة التي يرسل فيها الحل
-    apiKey: process.env.API_KEY || 'K83171079488957'
+    allowedGroupIds: [ 81889058],
+    verificationGroupId: 9969
 };
 
-// دالة الحل الذكية
-async function solveCaptcha(imageUrl) {
-    console.log("🔍 جاري معالجة الصورة مكانيّاً...");
+// دالة تحويل رابط الصورة إلى صيغة Base64
+async function urlToGenerativePart(url) {
+    const response = await axios.get(url, { responseType: 'arraybuffer' });
+    return {
+        inlineData: {
+            data: Buffer.from(response.data).toString("base64"),
+            mimeType: "image/jpeg"
+        },
+    };
+}
+
+// دالة الحل الذكية بواسطة Gemini AI
+async function solveCaptchaWithAI(imageUrl) {
+    console.log("👁️ جاري التحليل البصري الذكي للصورة...");
     try {
-        const response = await axios.post('https://api.ocr.space/parse/image', null, {
-            params: { 
-                apikey: settings.apiKey, 
-                url: imageUrl, 
-                language: 'eng', 
-                OCREngine: 2,
-                filetype: 'JPG',           // حل مشكلة E216
-                isOverlayRequired: true    // ضروري لاستخراج الإحداثيات
-            },
-            timeout: 20000 
-        });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        if (response.data.ParsedResults?.length > 0) {
-            const overlay = response.data.ParsedResults[0].TextOverlay;
-            if (!overlay || !overlay.Lines) return null;
+        const imagePart = await urlToGenerativePart(imageUrl);
+        const prompt = "في هذه الصورة يوجد عدة رموز. استخرج الرمز الموجود داخل المربع المظلل أو المميز فقط. أجب بالرمز المكون من 4 خانات فقط بدون أي كلمات إضافية.";
 
-            // 1. استخراج الرموز وإحداثياتها (left)
-            let candidates = [];
-            overlay.Lines.forEach(line => {
-                line.Words.forEach(word => {
-                    // نبحث عن كلمات من 3-4 خانات (أرقام وحروف)
-                    if (word.WordText.match(/^[A-Z0-9]{3,4}$/i)) {
-                        candidates.push({
-                            text: word.WordText.toUpperCase(),
-                            left: word.Left
-                        });
-                    }
-                });
-            });
-
-            // 2. ترتيب الرموز حسب موقعها (من اليسار لليمين)
-            candidates.sort((a, b) => a.left - b.left);
-            
-            console.log("📋 الرموز المرتبة مكانيّاً:", candidates.map(c => c.text));
-
-            // 3. اختيار الحل
-            // إذا كان المربع المظلل دائماً هو الأخير في الصورة (من اليسار لليمين)، نستخدم:
-            if (candidates.length > 0) {
-                const solution = candidates[candidates.length - 1].text;
-                console.log("🔑 الحل المختار:", solution);
-                return solution;
-            }
-        }
-        return null;
+        const result = await model.generateContent([prompt, imagePart]);
+        const solution = result.response.text().trim();
+        
+        console.log("🔑 الحل الذكي المستخرج:", solution);
+        return solution;
     } catch (err) {
-        console.error("❌ خطأ API:", err.message);
+        console.error("❌ خطأ في الذكاء الاصطناعي:", err.message);
         return null;
     }
 }
 
-// مراقبة الرسائل
 service.on('groupMessage', async (message) => {
     if (!settings.allowedGroupIds.includes(message.targetGroupId)) return;
 
@@ -75,8 +55,8 @@ service.on('groupMessage', async (message) => {
     else if (message.attachments && message.attachments.length > 0) imageUrl = message.attachments[0].link;
 
     if (imageUrl) {
-        console.log(`✅ تم اكتشاف صورة في القناة ${message.targetGroupId}`);
-        const solution = await solveCaptcha(imageUrl);
+        console.log(`✅ صورة مكتشفة، جاري حلها...`);
+        const solution = await solveCaptchaWithAI(imageUrl);
         
         if (solution) {
             await service.messaging.sendGroupMessage(settings.verificationGroupId, `#${solution}`);
@@ -84,8 +64,7 @@ service.on('groupMessage', async (message) => {
     }
 });
 
-service.on('ready', () => {
-    console.log("🚀 البوت متصل وجاهز للعمل!");
-});
+service.on('ready', () => console.log("🚀 البوت متصل ومزود بالذكاء الاصطناعي!"));
 
+// تأكد من إضافة بيانات تسجيل الدخول هنا أيضاً
 service.login(process.env.U_MAIL, process.env.U_PASS);
