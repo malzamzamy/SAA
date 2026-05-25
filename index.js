@@ -7,8 +7,6 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const Jimp = require('jimp');
 
-console.log("🚀 جاري تشغيل البوت...");
-
 const { WOLF } = wolfjs;
 const client = new WOLF();
 
@@ -25,32 +23,63 @@ client.on('groupMessage', async (message) => {
         const imageUrl = message.body || (message.attachments && message.attachments[0]?.link);
 
         if (imageUrl && (imageUrl.endsWith('.jpg') || imageUrl.endsWith('.jpeg') || imageUrl.endsWith('.png'))) {
-            console.log("📸 اكتشفت صورة! جاري المعالجة...");
+            console.log("📸 اكتشفت صورة! جاري عزل البطاقة المطلوبة...");
             try {
-                const code = await processImage(imageUrl);
+                // معالجة ذكية: عزل البطاقة المطلوبة وقراءتها
+                const code = await solveCaptcha(imageUrl);
                 console.log("🎯 الرمز المستخرج هو:", code);
+                
+                // يمكنك تفعيل الرد هنا إذا أردت
+                // await client.messaging.sendGroupMessage(CHANNEL_ID, `#${code}`);
             } catch (err) {
-                console.error("❌ خطأ أثناء المعالجة:", err.message);
+                console.error("❌ خطأ:", err.message);
             }
         }
     }
 });
 
-async function processImage(url) {
-    const response = await fetch(url);
-    const arrayBuffer = await response.arrayBuffer();
+async function solveCaptcha(url) {
+    // 1. تحميل الصورة الأصلية باستخدام Jimp للتحليل
+    const image = await Jimp.read(url);
+    const { width, height } = image.bitmap;
+
+    // 2. البحث عن الإطار الأصفر المتقطع (تحديد موقع البطاقة)
+    let minX = width, minY = height, maxX = 0, maxY = 0;
+    let found = false;
+
+    image.scan(0, 0, width, height, (x, y, idx) => {
+        const r = image.bitmap.data[idx + 0];
+        const g = image.bitmap.data[idx + 1];
+        const b = image.bitmap.data[idx + 2];
+
+        // اكتشاف اللون الأصفر الخاص بالإطار
+        if (r > 200 && g > 200 && b < 100) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+            found = true;
+        }
+    });
+
+    if (!found) throw new Error("لم يتم العثور على البطاقة المميزة!");
+
+    // 3. قص المنطقة المحددة بدقة
+    const cropWidth = maxX - minX;
+    const cropHeight = maxY - minY;
     
-    const processed = await sharp(Buffer.from(arrayBuffer))
+    const croppedBuffer = await sharp(await (await fetch(url)).arrayBuffer())
+        .extract({ left: minX + 5, top: minY + 5, width: cropWidth - 10, height: cropHeight - 10 })
         .greyscale()
-        .normalize()
-        .threshold(128)
+        .threshold(150)
         .toBuffer();
 
+    // 4. قراءة النص من المنطقة المقصوصة فقط
     const worker = await createWorker('eng+ara');
-    const { data: { text } } = await worker.recognize(processed);
+    const { data: { text } } = await worker.recognize(croppedBuffer);
     await worker.terminate();
 
-    return text.replace(/[^a-zA-Z0-9]/g, '').trim();
+    return text.replace(/[^a-zA-Z0-9\u0621-\u064A]/g, '').trim();
 }
 
-client.login(process.env.U_MAIL, process.env.U_PASS).catch(e => console.error("❌ خطأ تسجيل الدخول:", e));
+client.login(process.env.U_MAIL, process.env.U_PASS);
