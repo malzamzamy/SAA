@@ -2,9 +2,12 @@ import 'dotenv/config';
 import wolfjs from 'wolf.js';
 import sharp from 'sharp';
 import { createWorker } from 'tesseract.js';
-import Jimp from 'jimp';
+import { createRequire } from 'module';
 
-console.log("🚀 جاري تهيئة البوت...");
+const require = createRequire(import.meta.url);
+const Jimp = require('jimp');
+
+console.log("🚀 جاري تشغيل البوت...");
 
 const { WOLF } = wolfjs;
 const client = new WOLF();
@@ -19,21 +22,13 @@ client.on('ready', async () => {
 
 client.on('groupMessage', async (message) => {
     if (message.sourceSubscriberId == TARGET_USER_ID && message.targetGroupId == CHANNEL_ID) {
-        
-        // التحقق من نوع الرسالة (سواء رابط أو مرفق)
         const imageUrl = message.body || (message.attachments && message.attachments[0]?.link);
 
         if (imageUrl && (imageUrl.endsWith('.jpg') || imageUrl.endsWith('.jpeg') || imageUrl.endsWith('.png'))) {
             console.log("📸 اكتشفت صورة! جاري المعالجة...");
-            
             try {
-                // معالجة أولية (اكتشاف الرمز)
                 const code = await processImage(imageUrl);
                 console.log("🎯 الرمز المستخرج هو:", code);
-                
-                // يمكنك هنا إرسال الرمز للقناة
-                // await client.messaging.sendGroupMessage(CHANNEL_ID, `الرمز هو: ${code}`);
-                
             } catch (err) {
                 console.error("❌ خطأ أثناء المعالجة:", err.message);
             }
@@ -42,17 +37,15 @@ client.on('groupMessage', async (message) => {
 });
 
 async function processImage(url) {
-    // 1. تنزيل وتحسين الصورة
-    const buffer = await (await fetch(url)).arrayBuffer();
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
     
-    // تحويل لرمادي وتحسين التباين
-    const processed = await sharp(Buffer.from(buffer))
+    const processed = await sharp(Buffer.from(arrayBuffer))
         .greyscale()
         .normalize()
         .threshold(128)
         .toBuffer();
 
-    // 2. استخدام Tesseract لقراءة النص
     const worker = await createWorker('eng+ara');
     const { data: { text } } = await worker.recognize(processed);
     await worker.terminate();
