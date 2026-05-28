@@ -1,4 +1,4 @@
-name: XO Bot Runner
+name: SAA Bot Runner
 
 on:
   push:
